@@ -3,8 +3,8 @@ import google.generativeai as genai
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+TELEGRAM_TOKEN = "توكن البوت من BotFather"
+GOOGLE_API_KEY = "AIzaSyBa-uSeTCBXMw044I_0FN6n2qqh1E2DFjc"
 
 genai.configure(api_key=GOOGLE_API_KEY)
 
