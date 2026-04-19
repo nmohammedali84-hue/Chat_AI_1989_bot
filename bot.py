@@ -1,21 +1,20 @@
 import os
-import asyncio
-import anthropic
+import google.generativeai as genai
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+genai.configure(api_key=GOOGLE_API_KEY)
 
 MODEL_META = {
-    "claude":   {"name": "Claude",   "persona": "أنت Claude من Anthropic. شخصيتك: تحليلي عميق، صادق، تهتم بالدقة والأخلاقيات. أجب باللغة العربية بأسلوب تحليلي واضح ومختصر.", "emoji": "🟣"},
-    "chatgpt":  {"name": "ChatGPT",  "persona": "أنت ChatGPT من OpenAI. شخصيتك: عملي جداً، تحب التنظيم، تعطي خطوات واضحة قابلة للتطبيق. أجب باللغة العربية بإيجاز.", "emoji": "🟢"},
-    "gemini":   {"name": "Gemini",   "persona": "أنت Gemini من Google. شخصيتك: إبداعي، تبحث في زوايا غير متوقعة، تستخدم أمثلة واقعية. أجب باللغة العربية.", "emoji": "🔵"},
-    "grok":     {"name": "Grok",     "persona": "أنت Grok من xAI. شخصيتك: جريء ومباشر، لا تخاف من قول الحقيقة الصعبة، تتحدى الافتراضات. أجب باللغة العربية بصراحة.", "emoji": "⚫"},
-    "llama":    {"name": "Llama",    "persona": "أنت Llama من Meta. شخصيتك: متوازن وموضوعي، تعطي وجهات نظر متعددة بدون تحيز. أجب باللغة العربية.", "emoji": "🟠"},
-    "mistral":  {"name": "Mistral",  "persona": "أنت Mistral AI. شخصيتك: دقيق ومنطقي، تحب الكفاءة وتتجنب التكرار. أجب باللغة العربية بإيجاز وعمق.", "emoji": "🟤"},
+    "claude":   {"name": "Claude",   "persona": "أنت Claude من Anthropic. شخصيتك: تحليلي عميق، صادق، دقيق. أجب باللغة العربية بأسلوب تحليلي واضح ومختصر.", "emoji": "🟣"},
+    "chatgpt":  {"name": "ChatGPT",  "persona": "أنت ChatGPT من OpenAI. شخصيتك: عملي، منظم، تعطي خطوات واضحة. أجب باللغة العربية.", "emoji": "🟢"},
+    "gemini":   {"name": "Gemini",   "persona": "أنت Gemini من Google. شخصيتك: إبداعي، تبحث في زوايا غير متوقعة. أجب باللغة العربية.", "emoji": "🔵"},
+    "grok":     {"name": "Grok",     "persona": "أنت Grok من xAI. شخصيتك: جريء ومباشر، لا تخاف من الحقيقة الصعبة. أجب باللغة العربية.", "emoji": "⚫"},
+    "llama":    {"name": "Llama",    "persona": "أنت Llama من Meta. شخصيتك: متوازن وموضوعي. أجب باللغة العربية.", "emoji": "🟠"},
+    "mistral":  {"name": "Mistral",  "persona": "أنت Mistral AI. شخصيتك: دقيق ومنطقي، تحب الكفاءة. أجب باللغة العربية.", "emoji": "🟤"},
 }
 
 user_sessions = {}
@@ -28,6 +27,14 @@ def get_session(user_id):
             "waiting_question": False,
         }
     return user_sessions[user_id]
+
+def call_ai(persona, prompt):
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=persona
+    )
+    response = model.generate_content(prompt)
+    return response.text
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -71,17 +78,12 @@ async def models_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def rounds_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [
-            InlineKeyboardButton("1 جولة", callback_data="rounds_1"),
-            InlineKeyboardButton("2 جولتين", callback_data="rounds_2"),
-            InlineKeyboardButton("3 جولات", callback_data="rounds_3"),
-        ]
-    ]
-    await update.message.reply_text(
-        "🔄 اختاري عدد الجولات:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    keyboard = [[
+        InlineKeyboardButton("1 جولة", callback_data="rounds_1"),
+        InlineKeyboardButton("2 جولتين", callback_data="rounds_2"),
+        InlineKeyboardButton("3 جولات", callback_data="rounds_3"),
+    ]]
+    await update.message.reply_text("🔄 اختاري عدد الجولات:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def ask_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     s = get_session(update.effective_user.id)
@@ -152,13 +154,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 prev = "\n\n".join([f"{MODEL_META[h['model']]['name']}: {h['text']}" for h in history])
                 prompt = f"السؤال: {question}\n\nما قاله النماذج الأخرى:\n{prev}\n\nردّ على النقاش وقدّم رأيك المحسّن:"
 
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=600,
-                system=m["persona"],
-                messages=[{"role": "user", "content": prompt}]
-            )
-            text = response.content[0].text
+            text = call_ai(m["persona"], prompt)
             history.append({"model": model, "text": text})
 
             await update.message.reply_text(
@@ -169,13 +165,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⚖️ *الحَكَم يستخلص أفضل إجابة...*", parse_mode="Markdown")
 
     all_text = "\n\n---\n\n".join([f"{MODEL_META[h['model']]['name']}:\n{h['text']}" for h in history])
-    final = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=800,
-        system="أنت حَكَم محايد وخبير. استخلص أفضل إجابة شاملة من النقاش. أجب باللغة العربية.",
-        messages=[{"role": "user", "content": f"السؤال: {question}\n\nالنقاش:\n{all_text}\n\nاستخلص الإجابة المثلى:"}]
+    final_text = call_ai(
+        "أنت حَكَم محايد وخبير. استخلص أفضل إجابة شاملة من النقاش. أجب باللغة العربية.",
+        f"السؤال: {question}\n\nالنقاش:\n{all_text}\n\nاستخلص الإجابة المثلى:"
     )
-    final_text = final.content[0].text
 
     await update.message.reply_text(
         f"🏆 *الإجابة المثلى*\n\n{final_text}",
